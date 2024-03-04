@@ -141,4 +141,4 @@ class ProjectAgent:
         torch.save(self.model.state_dict(), path)
 
     def load(self):
-        self.model.load_state_dict(torch.load('model.pth', map_location=self.device))
+        self.model.load_state_dict(torch.load('src/model.pth', map_location=self.device))
