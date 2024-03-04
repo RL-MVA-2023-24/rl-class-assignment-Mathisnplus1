@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from  torch.nn.modules.loss import _Loss
 from typing import Callable, Optional
 from torch import Tensor
-from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -24,7 +23,9 @@ env = TimeLimit(
 # ENJOY!
 class ProjectAgent:
     def __init__(self, config, model):
-        device = "cuda" if next(model.parameters()).is_cuda else "cpu"
+        device = "cuda"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
         self.nb_actions = config['nb_actions']
         self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
         self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
@@ -35,7 +36,7 @@ class ProjectAgent:
         self.epsilon_stop = config['epsilon_decay_period'] if 'epsilon_decay_period' in config.keys() else 1000
         self.epsilon_delay = config['epsilon_delay_decay'] if 'epsilon_delay_decay' in config.keys() else 20
         self.epsilon_step = (self.epsilon_max-self.epsilon_min)/self.epsilon_stop
-        self.model = model 
+        self.model = model.to(device)
         self.target_model = deepcopy(self.model).to(device)
         self.criterion = config['criterion'] if 'criterion' in config.keys() else torch.nn.MSELoss()
         lr = config['learning_rate'] if 'learning_rate' in config.keys() else 0.001
@@ -60,6 +61,7 @@ class ProjectAgent:
         episode_return = []
         episode = 0
         episode_cum_reward = 0
+        max_reward = 0
         state, _ = env.reset()
         epsilon = self.epsilon_max
         step = 0
@@ -89,24 +91,27 @@ class ProjectAgent:
                 tau = self.update_target_tau
                 for key in model_state_dict:
                     target_state_dict[key] = tau*model_state_dict[key] + (1-tau)*target_state_dict[key]
-                target_model.load_state_dict(target_state_dict)
+                self.target_model.load_state_dict(target_state_dict)
             # next transition
             step += 1
             if done or trunc:
                 episode += 1
                 print("Episode ", '{:3d}'.format(episode), 
-                      ", epsilon ", '{:6.2f}'.format(epsilon), 
+                      ", epsilon ", '{:6.3f}'.format(epsilon), 
                       ", batch size ", '{:5d}'.format(len(self.memory)), 
                       ", episode return ", '{:4.1f}'.format(episode_cum_reward),
                       sep='')
                 state, _ = env.reset()
                 episode_return.append(episode_cum_reward)
+                if episode_cum_reward >= max_reward :
+                    max_reward = episode_cum_reward
+                    self.save(path="model_"+str(int(10*episode_cum_reward))+".pth")
                 episode_cum_reward = 0
             else:
                 state = next_state
         return episode_return
     def greedy_action(self, state):
-        device = "cuda" if next(self.model.parameters()).is_cuda else "cpu"
+        device = "cuda"
         with torch.no_grad():
             Q = self.model(torch.Tensor(state).unsqueeze(0).to(device))
             return torch.argmax(Q).item()
@@ -119,10 +124,7 @@ class ProjectAgent:
     def save(self, path):
         path = self.path if None else path
         print(f"Sauvegarde du modèle à : {path}")
-        self.agent.save(path)
+        torch.save(self.model.state_dict(), path)
 
     def load(self):
-        self.agent.load(self.path)
-
-
-    
+        self.model.load_state_dict(torch.load('model.pth', map_location=self.device))
