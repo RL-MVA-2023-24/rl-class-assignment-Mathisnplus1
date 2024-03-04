@@ -23,10 +23,9 @@ env = TimeLimit(
 # ENJOY!
 class ProjectAgent:
     def __init__(self, config=None, model=None):
-        device = "cuda"
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = device
         if config is not None :
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = device
             self.nb_actions = config['nb_actions']
             self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
             self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
@@ -47,6 +46,8 @@ class ProjectAgent:
             self.update_target_freq = config['update_target_freq'] if 'update_target_freq' in config.keys() else 20
             self.update_target_tau = config['update_target_tau'] if 'update_target_tau' in config.keys() else 0.005
         else :
+            device = "cpu"
+            self.device = device
             state_dim = 6
             n_action = 4
             nb_neurons=512
@@ -125,9 +126,8 @@ class ProjectAgent:
                 state = next_state
         return episode_return
     def greedy_action(self, state):
-        device = "cuda"
         with torch.no_grad():
-            Q = self.model(torch.Tensor(state).unsqueeze(0).to(device))
+            Q = self.model(torch.Tensor(state).unsqueeze(0).to(self.device))
             return torch.argmax(Q).item()
     def act(self, observation, use_random=False):
         if use_random:
